@@ -91,7 +91,7 @@ python main.py -i photo.jpg -o result.png -f fade --fade-alpha 0.35 --fade-color
 ### Film
 
 ```bat
-python main.py -i photo.jpg -o result.png -f film --film-gamma 0.85 --film-grain 0.06
+python main.py -i photo.jpg -o result.png -f film --film-strength 0.7 --film-noise 8
 ```
 
 ### Matte
@@ -103,13 +103,13 @@ python main.py -i photo.jpg -o result.png -f matte --matte-radius 0.58 --matte-s
 ### Царапины и шум
 
 ```bat
-python main.py -i photo.jpg -o result.png -f noise --noise-amount 0.10 --scratch-density 0.03
+python main.py -i photo.jpg -o result.png -f noise --noise-amount 0.3 --scratch-density 0.1
 ```
 
 ### Neon
 
 ```bat
-python main.py -i photo.jpg -o result.png -f neon --neon-strength 1.5 --neon-blur 0.8
+python main.py -i photo.jpg -o result.png -f neon --neon-strength 2 --neon-blur 1.3
 ```
 
 ## 5. Математическое описание алгоритмов
