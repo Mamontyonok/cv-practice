@@ -14,9 +14,16 @@ def read_image(path: str | Path) -> np.ndarray:
 
     try:
         encoded = np.fromfile(str(image_path), dtype=np.uint8)
-        image = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
     except OSError as exc:
         raise OSError(f"Could not read image '{image_path}': {exc}") from exc
+
+    if encoded.size == 0:
+        raise ValueError(f"Image file is empty: {image_path}")
+
+    try:
+        image = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
+    except cv2.error as exc:
+        raise ValueError(f"OpenCV could not decode image '{image_path}': {exc}") from exc
 
     if image is None:
         raise ValueError(f"OpenCV could not decode image: {image_path}")

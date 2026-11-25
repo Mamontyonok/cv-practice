@@ -10,13 +10,13 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
-from .extractors import FeatureExtractor
+from .extractors import FeatureExtractor, LAYER_EXTRACTORS, NEURAL_EXTRACTORS, ResNetExtractorBase
 
 
 class BagOfWords:
     """Bag-of-Visual-Words model: K-means vocabulary + image classifier."""
 
-    MODEL_FORMAT_VERSION = 1
+    MODEL_FORMAT_VERSION = 2
 
     def __init__(
         self,
@@ -165,10 +165,14 @@ class BagOfWords:
             raise RuntimeError("Cannot save an untrained model")
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        is_cnn_extractor = self.extractor_name in {"resnet18", "resnet50", "mobilenet_v3_small"}
+        is_cnn_extractor = self.extractor_name in NEURAL_EXTRACTORS
         pretrained = bool(getattr(self.extractor, "pretrained", True))
+        extractor_config = {}
         extractor_state = None
         if is_cnn_extractor:
+            extractor_config["window_size"] = self.extractor.window_size
+            if self.extractor_name in LAYER_EXTRACTORS:
+                extractor_config["layer"] = self.extractor.layer
             # Persist the CNN weights (including ImageNet weights) so the saved
             # classifier remains self-contained and does not depend on a later
             # download or an exact torchvision default-weight version.
@@ -180,6 +184,7 @@ class BagOfWords:
         payload = {
             "format_version": self.MODEL_FORMAT_VERSION,
             "extractor_name": self.extractor_name,
+            "extractor_config": extractor_config,
             "pretrained": pretrained,
             "extractor_state": extractor_state,
             "n_clusters": self.n_clusters,
@@ -202,12 +207,13 @@ class BagOfWords:
         if not model_path.is_file():
             raise FileNotFoundError(f"Model file not found: {model_path}")
         payload = joblib.load(model_path)
-        if payload.get("format_version") != cls.MODEL_FORMAT_VERSION:
+        version = payload.get("format_version")
+        if version not in (1, cls.MODEL_FORMAT_VERSION):
             raise ValueError("Unsupported or outdated model file format")
 
         extractor_name = payload["extractor_name"]
-        extractor_kwargs = {}
-        if extractor_name in {"resnet18", "resnet50", "mobilenet_v3_small"}:
+        extractor_kwargs = dict(payload.get("extractor_config", {}))
+        if extractor_name in NEURAL_EXTRACTORS:
             extractor_kwargs["device"] = device
             # The complete state dict is embedded in the model file. Build the
             # architecture without downloading weights, then restore that state.
@@ -225,7 +231,16 @@ class BagOfWords:
         )
         model.kmeans = payload["kmeans"]
         model.classifier = payload["classifier"]
-        if payload.get("extractor_state") is not None:
-            model.extractor.model.load_state_dict(payload["extractor_state"])
+        state = payload.get("extractor_state")
+        if state is not None:
+            if version == 1 and isinstance(extractor, ResNetExtractorBase):
+                # V1 numbered the backbone modules in a Sequential and omitted fc.
+                restored = {}
+                for key, value in state.items():
+                    index, suffix = key.split(".", 1)
+                    restored[f"{extractor.STAGES[int(index)]}.{suffix}"] = value
+                restored.update({f"fc.{key}": value for key, value in extractor.model.fc.state_dict().items()})
+                state = restored
+            extractor.model.load_state_dict(state)
         model.classes_ = payload.get("classes")
         return model
