@@ -4,6 +4,7 @@ import argparse
 import logging
 import sys
 
+from image_classification.extractors import FeatureExtractor, LAYER_EXTRACTORS, NEURAL_EXTRACTORS
 from image_classification.pipelines import run_predict, run_test, run_train
 
 
@@ -18,7 +19,7 @@ def cli_argument_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--model-out", default="models/bow_model.joblib", help="Output model file")
     train_parser.add_argument(
         "--extractor",
-        choices=("sift", "kaze", "resnet18", "resnet50", "mobilenet_v3_small"),
+        choices=("sift", "kaze", *NEURAL_EXTRACTORS),
         default="sift",
         help="Descriptor extractor (default: sift)",
     )
@@ -37,10 +38,14 @@ def cli_argument_parser() -> argparse.ArgumentParser:
     )
     train_parser.add_argument("--seed", type=int, default=42, help="Random seed")
     train_parser.add_argument("--device", default="auto", help="CNN device: auto, cpu, cuda, cuda:0, ...")
+    train_parser.add_argument("--window-size", type=int, help="Center crop side in pixels (default 224, multiple of 14 for DINOv2)")
+    train_parser.add_argument(
+        "--layer", type=int, help="ResNet layer (default 7) or DINOv2 block 0-11 (default 11). See 'layers'.",
+    )
     train_parser.add_argument(
         "--no-pretrained",
         action="store_true",
-        help="Do not load ImageNet weights (not recommended for feature quality)",
+        help="Initialize the neural extractor with random weights",
     )
     train_parser.add_argument("--no-external", action="store_true", help="Ignore ExtDataset")
     train_parser.add_argument("--exclude-other", action="store_true", help="Exclude the 00_Other class")
@@ -61,6 +66,9 @@ def cli_argument_parser() -> argparse.ArgumentParser:
     predict_parser.add_argument("--output-dir", default="outputs/predict", help="Directory for visualizations")
     predict_parser.add_argument("--show", action="store_true", help="Display figures interactively")
 
+    layers_parser = subparsers.add_parser("layers", help="List selectable feature layers and their indices")
+    layers_parser.add_argument("--extractor", required=True, choices=LAYER_EXTRACTORS)
+
     return parser
 
 
@@ -80,6 +88,10 @@ def main() -> int:
             run_test(args)
         elif args.mode == "predict":
             run_predict(args)
+        elif args.mode == "layers":
+            extractor = FeatureExtractor.create(args.extractor, device="cpu", pretrained=False)
+            for index, name in enumerate(extractor.layer_names):
+                print(f"{index:3d}  {name}")
         else:  
             parser.error(f"Unknown mode: {args.mode}")
     except (FileNotFoundError, ValueError, RuntimeError, OSError) as exc:

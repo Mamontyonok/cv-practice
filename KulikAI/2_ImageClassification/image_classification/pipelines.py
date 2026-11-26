@@ -9,7 +9,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 
 from .bow import BagOfWords
 from .data_loader import ImageRecord, LandmarkDataLoader
-from .extractors import FeatureExtractor
+from .extractors import FeatureExtractor, LAYER_EXTRACTORS, NEURAL_EXTRACTORS
 from .utils import read_image
 from .visualization import plot_histogram, visualize_image_with_histogram
 
@@ -83,6 +83,20 @@ def _create_loader(args) -> LandmarkDataLoader:
 
 
 def run_train(args) -> None:
+    extractor_kwargs = {}
+    if args.extractor in NEURAL_EXTRACTORS:
+        extractor_kwargs.update(device=args.device, pretrained=not args.no_pretrained)
+    if args.window_size is not None:
+        if not extractor_kwargs:
+            raise ValueError("--window-size requires a CNN extractor")
+        if args.window_size < 1:
+            raise ValueError("--window-size must be a positive integer")
+        extractor_kwargs["window_size"] = args.window_size
+    if args.layer is not None:
+        if args.extractor not in LAYER_EXTRACTORS:
+            raise ValueError(f"--layer requires one of {', '.join(LAYER_EXTRACTORS)}")
+        extractor_kwargs["layer"] = args.layer
+
     loader = _create_loader(args)
     records = loader.load("trainval")
     logger.info(
@@ -92,10 +106,12 @@ def run_train(args) -> None:
         not args.exclude_other,
     )
 
-    extractor_kwargs = {}
-    if args.extractor in {"resnet18", "resnet50", "mobilenet_v3_small"}:
-        extractor_kwargs.update(device=args.device, pretrained=not args.no_pretrained)
     extractor = FeatureExtractor.create(args.extractor, **extractor_kwargs)
+    if args.extractor in LAYER_EXTRACTORS:
+        logger.info(
+            "%s on %s: window=%d, layer=%d (%s)",
+            args.extractor, extractor.device, extractor.window_size, extractor.layer, extractor.layer_names[extractor.layer],
+        )
     records, descriptor_sets = _load_descriptors(records, extractor)
     labels = [record.label for record in records]
     logger.info(
