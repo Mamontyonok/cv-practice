@@ -3,9 +3,8 @@ __pycache__/
 .conda/
 .venv/
 venv/
-models/
-outputs/
 *.joblib
 .pytest_cache/
 Dataset
+
 
